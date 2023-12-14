@@ -25,6 +25,10 @@ import cozmo
 import socket
 import errno
 import qrcode
+import pandas as pd
+import numpy as np
+import tensorflow as tf
+import seaborn as sns
 from socket import error as socket_error
 from pyzbar.pyzbar import decode
 from pyzbar.pyzbar import ZBarSymbol
@@ -84,8 +88,24 @@ def QRPickUp(robot):
     else:
         print('I could not find the data.')
 
+
+
+def model_decision(dealer_card, player_value, count, num_hits):
+    count = 0
+    num_hits = 0
+    model = tf.keras.models.load_model('basic_model_highlow.keras')
+    d = {'dealer_card':[dealer_card], 'player_initial_value':[player_value], 'hit':[1], 'count':[count], 'num_hits': [num_hits]} 
+    model_df = pd.DataFrame(data=d)
+    prediction = model.predict(model_df)
+    if prediction > 0.48:
+        return 1
+    else:
+        return 0
+
+
+
 def cozmo_program(robot: cozmo.robot.Robot):
-    '''try:
+    try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket_error as msg:
         robot.say_text("socket failed" + msg).wait_for_completed()
@@ -95,7 +115,7 @@ def cozmo_program(robot: cozmo.robot.Robot):
     try:
         s.connect((ip, port))
     except socket_error as msg:
-        robot.say_text("socket failed to bind").wait_for_completed()'''
+        robot.say_text("socket failed to bind").wait_for_completed()
     cont = True
     
     robot.say_text("ready").wait_for_completed()   
@@ -104,47 +124,36 @@ def cozmo_program(robot: cozmo.robot.Robot):
     robot.set_head_angle(degrees(3)).wait_for_completed()
 
     #SET COZMO's NAME
-    myName = 'Zeek'
+    myName = 'zeek'
+    table = 1
+    pos = 6
 
+    s.sendall(f'{table};{myName};{pos}'.encode('utf-8'))
     #robot.camera.image_stream_enabled = True 
     count = 0 
     tot = 0
     hand = []
-    #parse the message to turn and ints into ints
-    while count < 2:
-
-        msg = QRPickUp(robot)
-        robot.say_text("My card is" + str(msg[0]) + 'of' + str(msg[1])).wait_for_completed()
-
-        if msg[0] == 'Jack':
-            msg[0] = 10
-        elif msg[0] == 'Queen':
-            msg[0] = 10
-        elif msg[0] == 'King':
-            msg[0] = 10
-        elif msg[0] == 'Ace':
-            msg[0] = 11
     
-        print(msg)
-        hand.append(msg[0])
-        tot = sum(hand)
-        #add data to hand
-        hand.append(msg)
-        print(hand)
-        print(tot)
-        robot.turn_in_place(cozmo.util.degrees(180)).wait_for_completed()
+    #parse the message to turn and ints into ints
+    while cont:
+        bytedata = s.recv(4048)
+        data = bytedata.decode('utf-8')
+        if not data:
+            cont = False
+            s.close()
+            quit()
+        else:
+            parseData = parseMessage(data)
+            if len(parseData == 5):
+                hand.append(QRPickUp())
+                s.send(f'{table};{myName}{1};{hand[0]}'.encode('utf-8'))
+                print(hand)
+            elif len(parseData == 4):
+                dealer_card = 
 
-        count += 1
-    if tot == 21:
-        robot.say_text('That is a BlackJack yay').wait_for_completed()
-        robot.turn_in_place(cozmo.util.degrees(360)).wait_for_completed()
-    elif tot < 15:
-        robot.say_text('Hit me I only have ' + str(tot)).wait_for_completed()
-        robot.anim_triggers(cozmo.anim.Triggers.HiccupRobotOnFace).wait_for_completed()
-        #robot.set_lift_height(0.0).wait_for_completed()  
-    elif tot >= 16:
-        robot.say_text("I have " + str(tot) + "so I will stay and pray.").wait_for_completed()
-        robot.turn_in_place(cozmo.util.degrees(90)).wait_for_completed()
 
-    '''s.sendall(b"Done")'''
+
+                
+    
+    #s.sendall(b"Done")
 cozmo.run_program(cozmo_program, use_viewer=True, force_viewer_on_top=True)
